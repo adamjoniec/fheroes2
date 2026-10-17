@@ -36,7 +36,7 @@ namespace fheroes2
     // Save an image into file. 'background' represents palette index from the original palette. Recommended value is 23.
     bool Save( const Image & image, const std::string & path, const uint8_t background );
 
-    bool Load( const std::string & path, Image & image );
+    bool Load( const std::string & path, Image & image, const std::vector<uint8_t> * palette = nullptr );
 
     Sprite decodeICNSprite( const uint8_t * data, const uint8_t * dataEnd, const ICNHeader & icnHeader );
 

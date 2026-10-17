@@ -110,3 +110,8 @@ fheroes2.data
 fheroes2.js
 fheroes2.wasm
 fheroes2.wasm.map
+
+# Local optional high-resolution builds and isolated runtime profiles
+/build-hd/
+/build-no-image/
+/runtime-hd/

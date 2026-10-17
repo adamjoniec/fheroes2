@@ -40,6 +40,7 @@
 #include "exception.h"
 #include "game_language.h"
 #include "h2d.h"
+#include "high_resolution.h"
 #include "icn.h"
 #include "image.h"
 #include "image_tool.h"
@@ -672,6 +673,7 @@ namespace
         const uint8_t * dataEnd = data + dataSize;
 
         _icnVsSprite[id][assetIndex] = fheroes2::decodeICNSprite( data, dataEnd, header1 );
+        fheroes2::loadHighResolutionFrame( _icnVsSprite[id][assetIndex], "icn", ICN::getIcnFileName( id ), assetIndex, true );
     }
 
     // This function returns true if sprites were successfully loaded from AGG file.
@@ -727,6 +729,7 @@ namespace
             const uint8_t * dataEnd = data + dataSize;
 
             _icnVsSprite[id][i] = fheroes2::decodeICNSprite( data, dataEnd, header1 );
+            fheroes2::loadHighResolutionFrame( _icnVsSprite[id][i], "icn", ICN::getIcnFileName( id ), i, !AGG::isExpansionResource( ICN::getIcnFileName( id ) ) );
         }
 
         return true;
@@ -4101,6 +4104,8 @@ namespace
                 digit += std::to_string( i + 1 );
 
                 _icnVsSprite[id][i] = fheroes2::decodeBMPFile( AGG::getDataFromAggFile( std::string( "ADVMBW" ) + digit + ".BMP", false ) );
+                fheroes2::loadHighResolutionFrame( _icnVsSprite[id][i], "bmp", std::string( "ADVMBW" ) + digit + ".BMP", 0,
+                                                   !AGG::isExpansionResource( std::string( "ADVMBW" ) + digit + ".BMP" ) );
             }
             break;
         }
@@ -4116,6 +4121,8 @@ namespace
                 digit += std::to_string( i );
 
                 _icnVsSprite[id][i] = fheroes2::decodeBMPFile( AGG::getDataFromAggFile( std::string( "SPELBW" ) + digit + ".BMP", false ) );
+                fheroes2::loadHighResolutionFrame( _icnVsSprite[id][i], "bmp", std::string( "SPELBW" ) + digit + ".BMP", 0,
+                                                   !AGG::isExpansionResource( std::string( "SPELBW" ) + digit + ".BMP" ) );
             }
             break;
         }
@@ -4131,6 +4138,8 @@ namespace
                 digit += std::to_string( i + 1 );
 
                 _icnVsSprite[id][i] = fheroes2::decodeBMPFile( AGG::getDataFromAggFile( std::string( "CMSEBW" ) + digit + ".BMP", false ) );
+                fheroes2::loadHighResolutionFrame( _icnVsSprite[id][i], "bmp", std::string( "CMSEBW" ) + digit + ".BMP", 0,
+                                                   !AGG::isExpansionResource( std::string( "CMSEBW" ) + digit + ".BMP" ) );
             }
             break;
         }
@@ -5733,6 +5742,7 @@ namespace
             }
 
             for ( size_t i = 0; i < count; ++i ) {
+                fheroes2::loadHighResolutionFrame( originalTIL[i], "til", tilFileName[id], i, !AGG::isExpansionResource( tilFileName[id] ) );
                 for ( uint32_t shapeId = 1; shapeId < 4; ++shapeId ) {
                     fheroes2::Image & image = tilImages[shapeId][i];
 

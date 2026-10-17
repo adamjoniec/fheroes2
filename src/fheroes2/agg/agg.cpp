@@ -21,11 +21,12 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
+#include "agg.h"
+
 #include <list>
 #include <stdexcept>
 #include <utility>
 
-#include "agg.h"
 #include "agg_file.h"
 #include "dir.h"
 #include "settings.h"
@@ -120,4 +121,9 @@ bool AGG::AGGInitializer::init()
 bool AGG::isPoLResourceFilePresent()
 {
     return heroes2x_agg.isGood();
+}
+
+bool AGG::isExpansionResource( const std::string & key )
+{
+    return heroes2x_agg.isGood() && heroes2x_agg.contains( key );
 }

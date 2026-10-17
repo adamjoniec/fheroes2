@@ -26,10 +26,15 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <iomanip>
 #include <ostream>
+#include <sstream>
 
 #include "exception.h"
+#include "high_resolution.h"
 #include "image.h"
+#include "image_tool.h"
 #include "logging.h"
 #include "serialize.h"
 
@@ -63,6 +68,7 @@ namespace
 
 SMKVideoSequence::SMKVideoSequence( const std::string & filePath )
 {
+    _filePath = filePath;
     verifyVideoFile( filePath );
 
     _videoFile.reset( smk_open_file( filePath.c_str(), SMK_MODE_MEMORY ) );
@@ -245,6 +251,7 @@ void SMKVideoSequence::getCurrentFrame( fheroes2::Image & image, const int32_t x
         return;
     }
 
+    auto backgroundDetail = image.takeHighResolution();
     const uint8_t * data = smk_get_video( _videoFile.get() );
     const uint8_t * paletteData = smk_get_palette( _videoFile.get() );
 
@@ -302,6 +309,30 @@ void SMKVideoSequence::getCurrentFrame( fheroes2::Image & image, const int32_t x
 
     palette.resize( 256 * 3 );
     memcpy( palette.data(), paletteData, 256 * 3 );
+    if ( fheroes2::graphicsScale() > 1 ) {
+        const int scale = fheroes2::graphicsScale();
+        if ( !backgroundDetail )
+            backgroundDetail = fheroes2::expandLogicalPixels( image, scale );
+        // First update the native fallback region even when a pack frame is absent.
+        fheroes2::Image nativeFrame = fheroes2::Crop( image, x, y, width, height );
+        auto fallback = fheroes2::expandLogicalPixels( nativeFrame, scale );
+        fheroes2::Copy( *fallback, 0, 0, *backgroundDetail, x * scale, y * scale, width * scale, height * scale );
+        namespace fs = std::filesystem;
+        fs::path root( fheroes2::graphicsPack() );
+        std::error_code error;
+        if ( fs::is_directory( root / ( "x" + std::to_string( scale ) ), error ) )
+            root /= "x" + std::to_string( scale );
+        std::ostringstream frameName;
+        frameName << std::setw( 4 ) << std::setfill( '0' ) << _currentFrameId + 1 << ".png";
+        const fs::path path = root / "videos" / fs::path( _filePath ).stem() / frameName.str();
+        fheroes2::Image detailed;
+        if ( fs::is_regular_file( path, error ) && fheroes2::Load( path.string(), detailed, &palette ) && detailed.width() == _width * scale
+             && detailed.height() == _height * scale ) {
+            detailed._disableTransformLayer();
+            fheroes2::Copy( detailed, 0, 0, *backgroundDetail, x * scale, y * scale, width * scale, height * scale );
+        }
+        image.setHighResolution( std::move( backgroundDetail ) );
+    }
 }
 
 void SMKVideoSequence::skipFrame()

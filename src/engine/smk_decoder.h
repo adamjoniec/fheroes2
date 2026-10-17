@@ -90,6 +90,7 @@ public:
     }
 
 private:
+    std::string _filePath;
     std::vector<std::vector<uint8_t>> _audioChannel;
     int32_t _width{ 0 };
     int32_t _height{ 0 };

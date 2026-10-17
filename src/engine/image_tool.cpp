@@ -155,7 +155,7 @@ namespace fheroes2
         return SaveImage( image, path );
     }
 
-    bool Load( const std::string & path, Image & image )
+    bool Load( const std::string & path, Image & image, const std::vector<uint8_t> * palette )
     {
         if ( image.singleLayer() ) {
             // Output image should be double-layer!
@@ -196,6 +196,39 @@ namespace fheroes2
         image.resize( surface->w, surface->h );
         image.reset();
 
+        // Cache a 5-bit RGB lookup for the current Smacker palette. Game PNGs
+        // continue to use the engine's full-resolution palette conversion.
+        thread_local std::vector<uint8_t> previousPalette;
+        thread_local std::vector<uint8_t> videoLookup;
+        if ( palette ) {
+            if ( palette->size() != 768 )
+                return false;
+            if ( previousPalette != *palette ) {
+                videoLookup.resize( 32768 );
+                for ( int key = 0; key < 32768; ++key ) {
+                    const int red = ( ( key >> 10 ) & 31 ) * 8 + 4;
+                    const int green = ( ( key >> 5 ) & 31 ) * 8 + 4;
+                    const int blue = ( key & 31 ) * 8 + 4;
+                    int nearest = 0;
+                    int distance = 3 * 256 * 256;
+                    for ( int i = 0; i < 256; ++i ) {
+                        const int dr = red - ( *palette )[i * 3];
+                        const int dg = green - ( *palette )[i * 3 + 1];
+                        const int db = blue - ( *palette )[i * 3 + 2];
+                        const int candidate = dr * dr + dg * dg + db * db;
+                        if ( candidate < distance ) {
+                            distance = candidate;
+                            nearest = i;
+                        }
+                    }
+                    videoLookup[key] = static_cast<uint8_t>( nearest );
+                }
+                previousPalette = *palette;
+            }
+        }
+        const auto colorId = [&]( const uint8_t red, const uint8_t green, const uint8_t blue ) {
+            return palette ? videoLookup[( red >> 3 ) * 1024 + ( green >> 3 ) * 32 + ( blue >> 3 )] : GetColorId( red, green, blue );
+        };
         const uint8_t * inY = static_cast<uint8_t *>( surface->pixels );
         uint8_t * outY = image.image();
         uint8_t * transformY = image.transform();
@@ -220,12 +253,12 @@ namespace fheroes2
                         *transformX = 2;
                     }
                     else {
-                        *outX = GetColorId( *( inX + 2 ), *( inX + 1 ), *inX );
+                        *outX = colorId( *( inX + 2 ), *( inX + 1 ), *inX );
                         *transformX = 0;
                     }
                 }
                 else {
-                    *outX = GetColorId( *( inX + 2 ), *( inX + 1 ), *inX );
+                    *outX = colorId( *( inX + 2 ), *( inX + 1 ), *inX );
                     *transformX = 0;
                 }
             }

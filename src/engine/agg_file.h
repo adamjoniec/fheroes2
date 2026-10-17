@@ -41,6 +41,12 @@ namespace fheroes2
             return !_stream.fail() && !_files.empty();
         }
 
+        bool contains( const std::string & fileName ) const
+        {
+            const auto entry = _files.find( fileName );
+            return entry != _files.end() && entry->second.first > 0;
+        }
+
         bool open( const std::string & fileName );
         std::vector<uint8_t> read( const std::string & fileName );
 

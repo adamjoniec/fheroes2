@@ -35,6 +35,7 @@
 #include "difficulty.h"
 #include "game.h"
 #include "game_io.h"
+#include "high_resolution.h"
 #include "logging.h"
 #include "race.h"
 #include "render_processor.h"
@@ -357,6 +358,8 @@ bool Settings::Read( const std::string & filePath )
         }
     }
 
+    fheroes2::configureGraphicsPack( config.StrParams( "graphics pack" ), config.Exists( "graphics scale" ) ? config.IntParams( "graphics scale" ) : 1 );
+
     if ( config.Exists( "screen scaling type" ) ) {
         setScreenScalingTypeNearest( config.StrParams( "screen scaling type" ) == "nearest" );
     }
@@ -556,6 +559,9 @@ std::string Settings::getOptionsString() const
     os << std::endl << "# Enable cursor software rendering: on/off" << std::endl;
     os << "cursor soft rendering = " << ( _gameOptions.Modes( GAME_CURSOR_SOFT_EMULATION ) ? "on" : "off" ) << std::endl;
 
+    os << std::endl << "# Optional high-resolution graphics pack (restart required); scale: 1, 2, 3, 4" << std::endl;
+    os << "graphics pack = " << fheroes2::graphicsPack() << std::endl;
+    os << "graphics scale = " << fheroes2::graphicsScale() << std::endl;
     os << std::endl << "# Screen scaling type: nearest or linear" << std::endl;
     os << "screen scaling type = " << ( _gameOptions.Modes( GAME_SCREEN_SCALING_TYPE_NEAREST ) ? "nearest" : "linear" ) << std::endl;
 
