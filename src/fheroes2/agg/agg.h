@@ -57,6 +57,8 @@ namespace AGG
 
     std::vector<uint8_t> getDataFromAggFile( const std::string & key, const bool ignoreExpansion );
 
+    bool isExpansionResource( const std::string & key );
+
     // Only for internal usage within AGG namespace.
     bool isPoLResourceFilePresent();
 }

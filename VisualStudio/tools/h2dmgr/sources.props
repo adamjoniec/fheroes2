@@ -2,6 +2,7 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="..\engine\h2d_file.cpp" />
+    <ClCompile Include="..\engine\high_resolution.cpp" />
     <ClCompile Include="..\engine\image.cpp" />
     <ClCompile Include="..\engine\image_color_conversion.cpp" />
     <ClCompile Include="..\engine\image_palette.cpp" />
@@ -16,6 +17,7 @@
   <ItemGroup>
     <ClInclude Include="..\engine\agg_file.h" />
     <ClInclude Include="..\engine\h2d_file.h" />
+    <ClInclude Include="..\engine\high_resolution.h" />
     <ClInclude Include="..\engine\image.h" />
     <ClInclude Include="..\engine\image_color_conversion.h" />
     <ClInclude Include="..\engine\image_palette.h" />

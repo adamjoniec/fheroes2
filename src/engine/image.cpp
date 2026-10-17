@@ -27,6 +27,7 @@
 #include <cstring>
 
 #include "exception.h"
+#include "high_resolution.h"
 #include "image_color_conversion.h"
 #include "image_palette.h"
 
@@ -439,6 +440,10 @@ namespace
     void ApplyRawPalette( const fheroes2::Image & in, int32_t inX, int32_t inY, fheroes2::Image & out, int32_t outX, int32_t outY, int32_t width, int32_t height,
                           const uint8_t * palette )
     {
+        const fheroes2::HighResolutionGuard detailGuard( out, &in, [&]( const fheroes2::Image * source, fheroes2::Image & target, const int scale ) {
+            ApplyRawPalette( *source, inX * scale, inY * scale, target, outX * scale, outY * scale, width * scale, height * scale, palette );
+        } );
+
         if ( !Verify( in, inX, inY, out, outX, outY, width, height ) ) {
             return;
         }
@@ -484,7 +489,8 @@ namespace
 namespace fheroes2
 {
     Image::Image( Image && image ) noexcept
-        : _data( std::move( image._data ) )
+        : _highResolution( std::move( image._highResolution ) )
+        , _data( std::move( image._data ) )
     {
         std::swap( _width, image._width );
         std::swap( _height, image._height );
@@ -511,6 +517,7 @@ namespace fheroes2
         std::swap( _width, image._width );
         std::swap( _height, image._height );
         std::swap( _data, image._data );
+        std::swap( _highResolution, image._highResolution );
         std::swap( _singleLayer, image._singleLayer );
 
         return *this;
@@ -518,6 +525,7 @@ namespace fheroes2
 
     uint8_t * Image::image()
     {
+        discardHighResolution();
         return _data.get();
     }
 
@@ -528,6 +536,7 @@ namespace fheroes2
 
     void Image::clear()
     {
+        discardHighResolution();
         _data.reset();
 
         _width = 0;
@@ -558,6 +567,7 @@ namespace fheroes2
             return;
         }
 
+        discardHighResolution();
         const size_t size = static_cast<size_t>( width_ ) * height_;
 
         if ( _singleLayer ) {
@@ -609,6 +619,7 @@ namespace fheroes2
         }
 
         memcpy( _data.get(), image._data.get(), _singleLayer ? imageSize : imageSize * 2 );
+        _highResolution = image._highResolution ? std::make_unique<Image>( *image._highResolution ) : nullptr;
     }
 
     Sprite::Sprite( Sprite && sprite ) noexcept
@@ -971,6 +982,10 @@ namespace fheroes2
     void AlphaBlit( const Image & in, int32_t inX, int32_t inY, Image & out, int32_t outX, int32_t outY, int32_t width, int32_t height, const uint8_t alphaValue,
                     const bool flip /* = false */ )
     {
+        const fheroes2::HighResolutionGuard detailGuard( out, &in, [&]( const fheroes2::Image * source, fheroes2::Image & target, const int scale ) {
+            AlphaBlit( *source, inX * scale, inY * scale, target, outX * scale, outY * scale, width * scale, height * scale, alphaValue, flip );
+        } );
+
         if ( alphaValue == 0 ) {
             // There is nothing we need to do.
             return;
@@ -1169,6 +1184,10 @@ namespace fheroes2
 
     void ApplyTransform( Image & image, int32_t x, int32_t y, int32_t width, int32_t height, const uint8_t transformId )
     {
+        const fheroes2::HighResolutionGuard detailGuard( image, nullptr, [&]( const fheroes2::Image *, fheroes2::Image & target, const int scale ) {
+            ApplyTransform( target, x * scale, y * scale, width * scale, height * scale, transformId );
+        } );
+
         if ( !Verify( image, x, y, width, height ) ) {
             return;
         }
@@ -1229,6 +1248,10 @@ namespace fheroes2
 
     void Blit( const Image & in, int32_t inX, int32_t inY, Image & out, int32_t outX, int32_t outY, int32_t width, int32_t height, const bool flip /* = false */ )
     {
+        const fheroes2::HighResolutionGuard detailGuard( out, &in, [&]( const fheroes2::Image * source, fheroes2::Image & target, const int scale ) {
+            Blit( *source, inX * scale, inY * scale, target, outX * scale, outY * scale, width * scale, height * scale, flip );
+        } );
+
         if ( in.singleLayer() && !flip ) {
             Copy( in, inX, inY, out, outX, outY, width, height );
             return;
@@ -1355,6 +1378,9 @@ namespace fheroes2
 
     void Copy( const Image & in, Image & out )
     {
+        const fheroes2::HighResolutionGuard detailGuard( out, &in,
+                                                         [&]( const fheroes2::Image * source, fheroes2::Image & target, const int ) { Copy( *source, target ); } );
+
         if ( !out.singleLayer() && !in.singleLayer() ) {
             // Both images have transform layer. Copy using the assignment operator.
             out = in;
@@ -1387,6 +1413,10 @@ namespace fheroes2
 
     void Copy( const Image & in, int32_t inX, int32_t inY, Image & out, int32_t outX, int32_t outY, int32_t width, int32_t height )
     {
+        const fheroes2::HighResolutionGuard detailGuard( out, &in, [&]( const fheroes2::Image * source, fheroes2::Image & target, const int scale ) {
+            Copy( *source, inX * scale, inY * scale, target, outX * scale, outY * scale, width * scale, height * scale );
+        } );
+
         if ( !Verify( in, inX, inY, out, outX, outY, width, height ) ) {
             return;
         }
@@ -1433,6 +1463,10 @@ namespace fheroes2
 
     void copyTransformLayer( const Image & in, Image & out )
     {
+        const fheroes2::HighResolutionGuard detailGuard( out, &in, [&]( const fheroes2::Image * source, fheroes2::Image & target, const int ) {
+            copyTransformLayer( *source, target );
+        } );
+
         if ( in.empty() || out.empty() || in.singleLayer() || in.width() != out.width() || in.height() != out.height() ) {
             assert( 0 );
             return;
@@ -1450,6 +1484,10 @@ namespace fheroes2
 
     void copyTransformLayer( const Image & in, int32_t inX, int32_t inY, Image & out, int32_t outX, int32_t outY, int32_t width, int32_t height )
     {
+        const fheroes2::HighResolutionGuard detailGuard( out, &in, [&]( const fheroes2::Image * source, fheroes2::Image & target, const int scale ) {
+            copyTransformLayer( *source, inX * scale, inY * scale, target, outX * scale, outY * scale, width * scale, height * scale );
+        } );
+
         if ( in.empty() || out.empty() || in.singleLayer() ) {
             assert( 0 );
             return;
@@ -1537,6 +1575,10 @@ namespace fheroes2
     void CreateDitheringTransition( const Image & in, int32_t inX, int32_t inY, Image & out, int32_t outX, int32_t outY, int32_t width, int32_t height,
                                     const bool isVertical, const bool isReverse )
     {
+        const HighResolutionGuard detailGuard( out, &in, [&]( const Image * source, Image & target, const int scale ) {
+            CreateDitheringTransition( *source, inX * scale, inY * scale, target, outX * scale, outY * scale, width * scale, height * scale, isVertical, isReverse );
+        } );
+
         if ( !Verify( in, inX, inY, out, outX, outY, width, height ) ) {
             return;
         }
@@ -1830,6 +1872,17 @@ namespace fheroes2
 
     void DrawBorder( Image & image, const uint8_t value, const uint32_t skipFactor /* =0 */ )
     {
+        const HighResolutionGuard detailGuard( image, nullptr, [&]( const Image *, Image & target, const int scale ) {
+            Image mask( image.width(), image.height() );
+            mask.fill( 0 );
+            DrawBorder( mask, 1, skipFactor );
+            const uint8_t * pixels = static_cast<const Image &>( mask ).image();
+            for ( int y = 0; y < mask.height(); ++y )
+                for ( int x = 0; x < mask.width(); ++x )
+                    if ( pixels[y * mask.width() + x] )
+                        Fill( target, x * scale, y * scale, scale, scale, value );
+        } );
+
         if ( image.empty() || image.width() < 2 || image.height() < 2 ) {
             return;
         }
@@ -2002,6 +2055,13 @@ namespace fheroes2
 
     void DrawLine( Image & image, const Point & start, const Point & end, const uint8_t value, const Rect & roi /* = Rect() */ )
     {
+        const fheroes2::HighResolutionGuard detailGuard( image, nullptr, [&]( const fheroes2::Image *, fheroes2::Image & target, const int scale ) {
+            for ( int dy = 0; dy < scale; ++dy )
+                for ( int dx = 0; dx < scale; ++dx )
+                    DrawLine( target, { start.x * scale + dx, start.y * scale + dy }, { end.x * scale + dx, end.y * scale + dy }, value,
+                              { roi.x * scale, roi.y * scale, roi.width * scale, roi.height * scale } );
+        } );
+
         if ( image.empty() ) {
             return;
         }
@@ -2241,6 +2301,10 @@ namespace fheroes2
 
     void Fill( Image & image, int32_t x, int32_t y, int32_t width, int32_t height, const uint8_t colorId )
     {
+        const fheroes2::HighResolutionGuard detailGuard( image, nullptr, [&]( const fheroes2::Image *, fheroes2::Image & target, const int scale ) {
+            Fill( target, x * scale, y * scale, width * scale, height * scale, colorId );
+        } );
+
         if ( !Verify( image, x, y, width, height ) ) {
             return;
         }
@@ -2272,6 +2336,10 @@ namespace fheroes2
 
     void FillTransform( Image & image, int32_t x, int32_t y, int32_t width, int32_t height, const uint8_t transformId )
     {
+        const fheroes2::HighResolutionGuard detailGuard( image, nullptr, [&]( const fheroes2::Image *, fheroes2::Image & target, const int scale ) {
+            FillTransform( target, x * scale, y * scale, width * scale, height * scale, transformId );
+        } );
+
         if ( !Verify( image, x, y, width, height ) || image.singleLayer() ) {
             return;
         }
@@ -2398,6 +2466,10 @@ namespace fheroes2
     void Flip( const Image & in, int32_t inX, int32_t inY, Image & out, int32_t outX, int32_t outY, int32_t width, int32_t height, const bool horizontally,
                const bool vertically )
     {
+        const fheroes2::HighResolutionGuard detailGuard( out, &in, [&]( const fheroes2::Image * source, fheroes2::Image & target, const int scale ) {
+            Flip( *source, inX * scale, inY * scale, target, outX * scale, outY * scale, width * scale, height * scale, horizontally, vertically );
+        } );
+
         if ( !Verify( in, inX, inY, out, outX, outY, width, height ) ) {
             return;
         }
@@ -2707,6 +2779,10 @@ namespace fheroes2
 
     void ReplaceColorId( Image & image, const uint8_t oldColorId, const uint8_t newColorId )
     {
+        const fheroes2::HighResolutionGuard detailGuard( image, nullptr, [&]( const fheroes2::Image *, fheroes2::Image & target, const int ) {
+            ReplaceColorId( target, oldColorId, newColorId );
+        } );
+
         if ( image.empty() ) {
             return;
         }
@@ -2723,6 +2799,10 @@ namespace fheroes2
 
     void ReplaceColorIdByTransformId( Image & image, const uint8_t colorId, const uint8_t transformId )
     {
+        const fheroes2::HighResolutionGuard detailGuard( image, nullptr, [&]( const fheroes2::Image *, fheroes2::Image & target, const int ) {
+            ReplaceColorIdByTransformId( target, colorId, transformId );
+        } );
+
         if ( transformId > 15 || image.singleLayer() ) {
             return;
         }
@@ -2742,6 +2822,10 @@ namespace fheroes2
 
     void ReplaceTransformIdByColorId( Image & image, const uint8_t transformId, const uint8_t colorId )
     {
+        const fheroes2::HighResolutionGuard detailGuard( image, nullptr, [&]( const fheroes2::Image *, fheroes2::Image & target, const int ) {
+            ReplaceTransformIdByColorId( target, transformId, colorId );
+        } );
+
         if ( image.empty() || image.singleLayer() ) {
             return;
         }
@@ -2771,6 +2855,11 @@ namespace fheroes2
     void Resize( const Image & in, const int32_t inX, const int32_t inY, const int32_t widthRoiIn, const int32_t heightRoiIn, Image & out, const int32_t outX,
                  const int32_t outY, const int32_t widthRoiOut, const int32_t heightRoiOut )
     {
+        const fheroes2::HighResolutionGuard detailGuard( out, &in, [&]( const fheroes2::Image * source, fheroes2::Image & target, const int scale ) {
+            Resize( *source, inX * scale, inY * scale, widthRoiIn * scale, heightRoiIn * scale, target, outX * scale, outY * scale, widthRoiOut * scale,
+                    heightRoiOut * scale );
+        } );
+
         if ( !Validate( in, inX, inY, widthRoiIn, heightRoiIn ) || !Validate( out, outX, outY, widthRoiOut, heightRoiOut ) ) {
             return;
         }
@@ -2873,6 +2962,10 @@ namespace fheroes2
 
     void SetPixel( Image & image, const int32_t x, const int32_t y, const uint8_t value )
     {
+        const fheroes2::HighResolutionGuard detailGuard( image, nullptr, [&]( const fheroes2::Image *, fheroes2::Image & target, const int scale ) {
+            Fill( target, x * scale, y * scale, scale, scale, value );
+        } );
+
         if ( image.empty() || x >= image.width() || y >= image.height() || x < 0 || y < 0 ) {
             return;
         }
@@ -2886,6 +2979,11 @@ namespace fheroes2
 
     void SetPixel( Image & image, const std::vector<Point> & points, const uint8_t value )
     {
+        const fheroes2::HighResolutionGuard detailGuard( image, nullptr, [&]( const fheroes2::Image *, fheroes2::Image & target, const int scale ) {
+            for ( const auto & point : points )
+                Fill( target, point.x * scale, point.y * scale, scale, scale, value );
+        } );
+
         if ( image.empty() ) {
             return;
         }
@@ -2909,6 +3007,10 @@ namespace fheroes2
 
     void SetTransformPixel( Image & image, const int32_t x, const int32_t y, const uint8_t value )
     {
+        const fheroes2::HighResolutionGuard detailGuard( image, nullptr, [&]( const fheroes2::Image *, fheroes2::Image & target, const int scale ) {
+            FillTransform( target, x * scale, y * scale, scale, scale, value );
+        } );
+
         if ( image.empty() || image.singleLayer() || x >= image.width() || y >= image.height() || x < 0 || y < 0 ) {
             return;
         }
@@ -2995,6 +3097,11 @@ namespace fheroes2
     void SubpixelResize( const Image & in, const int32_t inX, const int32_t inY, const int32_t widthRoiIn, const int32_t heightRoiIn, Image & out, const int32_t outX,
                          const int32_t outY, const int32_t widthRoiOut, const int32_t heightRoiOut )
     {
+        const fheroes2::HighResolutionGuard detailGuard( out, &in, [&]( const fheroes2::Image * source, fheroes2::Image & target, const int scale ) {
+            SubpixelResize( *source, inX * scale, inY * scale, widthRoiIn * scale, heightRoiIn * scale, target, outX * scale, outY * scale, widthRoiOut * scale,
+                            heightRoiOut * scale );
+        } );
+
         if ( !Validate( in, inX, inY, widthRoiIn, heightRoiIn ) || !Validate( out, outX, outY, widthRoiOut, heightRoiOut ) ) {
             return;
         }
@@ -3237,6 +3344,9 @@ namespace fheroes2
 
     void Transpose( const Image & in, Image & out )
     {
+        const fheroes2::HighResolutionGuard detailGuard( out, &in,
+                                                         [&]( const fheroes2::Image * source, fheroes2::Image & target, const int ) { Transpose( *source, target ); } );
+
         assert( !out.empty() );
 
         if ( in.empty() || in.width() != out.height() || in.height() != out.width() ) {

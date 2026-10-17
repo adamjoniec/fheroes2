@@ -74,6 +74,7 @@ namespace fheroes2
 
         uint8_t * transform()
         {
+            discardHighResolution();
             // Why do you want to get transform layer from the single-layer image?
             assert( !_singleLayer );
 
@@ -112,9 +113,30 @@ namespace fheroes2
         void _disableTransformLayer()
         {
             _singleLayer = true;
+            if ( _highResolution )
+                _highResolution->_disableTransformLayer();
+        }
+
+        // Optional detailed pixels; width/height and sprite offsets remain in game coordinates.
+        const Image * highResolution() const
+        {
+            return _highResolution.get();
+        }
+        void discardHighResolution()
+        {
+            _highResolution.reset();
+        }
+        std::unique_ptr<Image> takeHighResolution()
+        {
+            return std::move( _highResolution );
+        }
+        void setHighResolution( std::unique_ptr<Image> image )
+        {
+            _highResolution = std::move( image );
         }
 
     private:
+        std::unique_ptr<Image> _highResolution;
         void copy( const Image & image );
 
         int32_t _width{ 0 };

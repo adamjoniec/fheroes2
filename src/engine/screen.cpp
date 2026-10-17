@@ -31,6 +31,8 @@
 #include <set>
 #include <utility>
 
+#include "high_resolution.h"
+
 // Managing compiler warnings for SDL headers
 #if defined( __GNUC__ )
 #pragma GCC diagnostic push
@@ -713,6 +715,16 @@ namespace
 
             vita2d_init();
 
+            if ( !isFullScreen && fheroes2::graphicsScale() > 1 ) {
+                SDL_DisplayMode desktop{};
+                double zoom = fheroes2::graphicsScale();
+                if ( SDL_GetDesktopDisplayMode( 0, &desktop ) == 0 ) {
+                    zoom = std::min( zoom, std::min( desktop.w * 0.9 / resolutionInfo.gameWidth, desktop.h * 0.9 / resolutionInfo.gameHeight ) );
+                }
+                zoom = std::max( 1.0, zoom );
+                resolutionInfo.screenWidth = static_cast<int>( resolutionInfo.gameWidth * zoom );
+                resolutionInfo.screenHeight = static_cast<int>( resolutionInfo.gameHeight * zoom );
+            }
             _window = SDL_CreateWindow( "", 0, 0, resolutionInfo.gameWidth, resolutionInfo.gameHeight, 0 );
             if ( _window == nullptr ) {
                 ERROR_LOG( "Failed to create an application window of " << resolutionInfo.gameWidth << " x " << resolutionInfo.gameHeight
@@ -1086,6 +1098,8 @@ namespace
         SDL_Surface * _surface{ nullptr };
         SDL_Renderer * _renderer{ nullptr };
         SDL_Texture * _texture{ nullptr };
+        SDL_Texture * _detailTexture{ nullptr };
+        SDL_Surface * _detailSurface{ nullptr };
         int _driverIndex{ -1 };
 
         std::string _previousWindowTitle;
@@ -1101,6 +1115,15 @@ namespace
 
         void clear() override
         {
+            if ( _detailTexture ) {
+                SDL_DestroyTexture( _detailTexture );
+                _detailTexture = nullptr;
+            }
+            if ( _detailSurface ) {
+                SDL_FreeSurface( _detailSurface );
+                _detailSurface = nullptr;
+            }
+
             if ( _texture != nullptr ) {
                 SDL_DestroyTexture( _texture );
                 _texture = nullptr;
@@ -1167,7 +1190,39 @@ namespace
                 return;
             }
 
-            returnCode = SDL_RenderCopy( _renderer, _texture, nullptr, nullptr );
+            SDL_Texture * frameTexture = _texture;
+            if ( fheroes2::graphicsScale() > 1 ) {
+                const int scale = fheroes2::graphicsScale();
+                const int width = display.width() * scale;
+                const int height = display.height() * scale;
+                if ( _detailSurface && ( _detailSurface->w != width || _detailSurface->h != height ) ) {
+                    SDL_FreeSurface( _detailSurface );
+                    _detailSurface = nullptr;
+                    SDL_DestroyTexture( _detailTexture );
+                    _detailTexture = nullptr;
+                }
+                if ( !_detailSurface ) {
+                    _detailSurface = SDL_CreateRGBSurface( 0, width, height, 32, _surface->format->Rmask, _surface->format->Gmask, _surface->format->Bmask,
+                                                           _surface->format->Amask );
+                    if ( _detailSurface )
+                        _detailTexture = SDL_CreateTexture( _renderer, _detailSurface->format->format, SDL_TEXTUREACCESS_STREAMING, width, height );
+                    if ( !_detailSurface || !_detailTexture ) {
+                        ERROR_LOG( "Unable to allocate high-resolution framebuffer: " << SDL_GetError() )
+                    }
+                }
+                if ( _detailTexture && _detailSurface ) {
+                    const fheroes2::Image * detailed = display.highResolution();
+                    std::unique_ptr<fheroes2::Image> fallback;
+                    if ( !detailed ) {
+                        fallback = fheroes2::expandLogicalPixels( display, scale );
+                        detailed = fallback.get();
+                    }
+                    copyImageToSurface( *detailed, _detailSurface, { 0, 0, width, height } );
+                    if ( SDL_UpdateTexture( _detailTexture, nullptr, _detailSurface->pixels, _detailSurface->pitch ) == 0 )
+                        frameTexture = _detailTexture;
+                }
+            }
+            returnCode = SDL_RenderCopy( _renderer, frameTexture, nullptr, nullptr );
             if ( returnCode < 0 ) {
                 ERROR_LOG( "Failed to copy render.The error value: " << returnCode << ", description: " << SDL_GetError() )
                 return;
@@ -1232,9 +1287,9 @@ namespace
             SDL_RendererInfo rendererInfo;
             _driverIndex = -1;
 
+            const char * requestedDriver = SDL_GetHint( SDL_HINT_RENDER_DRIVER );
+            const uint32_t requiredFlags = requestedDriver && std::strcmp( requestedDriver, "software" ) == 0 ? SDL_RENDERER_SOFTWARE : SDL_RENDERER_ACCELERATED;
             if ( const int driverCount = SDL_GetNumRenderDrivers(); driverCount >= 0 ) {
-                const uint32_t requiredFlags = SDL_RENDERER_ACCELERATED;
-
                 for ( int driverId = 0; driverId < driverCount; ++driverId ) {
                     const int returnCode = SDL_GetRenderDriverInfo( driverId, &rendererInfo );
                     if ( returnCode < 0 ) {
@@ -1242,6 +1297,8 @@ namespace
                         continue;
                     }
 
+                    if ( requestedDriver && *requestedDriver && std::strcmp( requestedDriver, rendererInfo.name ) != 0 )
+                        continue;
                     if ( ( rendererInfo.flags & requiredFlags ) != requiredFlags ) {
                         continue;
                     }
@@ -1268,6 +1325,8 @@ namespace
                 ERROR_LOG( "Failed to get the number of render drivers. The error value: " << driverCount << ", description: " << SDL_GetError() )
             }
 
+            if ( fheroes2::graphicsScale() > 1 )
+                isPaletteModeSupported = false;
             _surface = SDL_CreateRGBSurface( 0, resolutionInfo.gameWidth, resolutionInfo.gameHeight, isPaletteModeSupported ? 8 : 32, 0, 0, 0, 0 );
             if ( _surface == nullptr ) {
                 ERROR_LOG( "Failed to create a surface of " << resolutionInfo.gameWidth << " x " << resolutionInfo.gameHeight << " size. The error: " << SDL_GetError() )
@@ -1282,7 +1341,7 @@ namespace
 
             _createPalette();
 
-            _renderer = SDL_CreateRenderer( _window, _driverIndex, SDL_RENDERER_ACCELERATED );
+            _renderer = SDL_CreateRenderer( _window, _driverIndex, requiredFlags );
             if ( _renderer == nullptr ) {
                 ERROR_LOG( "Failed to create a window renderer of " << resolutionInfo.gameWidth << " x " << resolutionInfo.gameHeight
                                                                     << " size. The error: " << SDL_GetError() )
@@ -1595,6 +1654,7 @@ namespace fheroes2
 
     uint8_t * Display::image()
     {
+        discardHighResolution();
         return _renderSurface != nullptr ? _renderSurface : Image::image();
     }
 
